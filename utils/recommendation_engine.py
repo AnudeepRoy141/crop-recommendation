@@ -118,8 +118,8 @@ class CropRecommendationEngine:
             return 8.0  # High regional compatibility
         elif crop['type'] in ['Cereals', 'Pulses'] and region_info['climate_zone'] in ['Subtropical', 'Tropical']:
             return 6.0  # Moderate compatibility
-        elif crop['type'] in ['Vegetables', 'Fruits'] and region_info['annual_rainfall'] > 800:
-            return 7.0  # Good for vegetables/fruits with adequate rainfall
+        # elif crop['type'] in ['Vegetables', 'Fruits'] and region_info['annual_rainfall'] > 800:
+            # return 7.0  # Good for vegetables/fruits with adequate rainfall
         else:
             return 5.0  # Neutral/average compatibility
     
