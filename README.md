@@ -1,4 +1,4 @@
-A machine learning-based crop recommendation system that suggests the most suitable crop to grow based on soil and environmental parameters. The project uses Python, scikit-learn, and a dataset containing features like nitrogen, phosphorus, potassium, temperature, humidity, pH, and rainfall. The model predicts the best crop for given conditions, helping farmers make data-driven decisions.
+A RAG based crop recommendation system that suggests the most suitable crop to grow based on soil and environmental parameters. The project uses Python, scikit-learn, and a dataset containing features like nitrogen, phosphorus, potassium, temperature, humidity, pH, and rainfall. The model predicts the best crop for given conditions, helping farmers make data-driven decisions.
 
 ## Features
 
