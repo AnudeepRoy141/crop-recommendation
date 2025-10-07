@@ -49,14 +49,72 @@ def _fetch_crops_from_api(api_url, api_key):
         'x-api-key': api_key,
         'Accept': 'application/json',
     }
+    # For data.gov.in, the API key must be in the query string as `api-key`
     resp = requests.get(api_url, headers=headers, timeout=15)
     resp.raise_for_status()
     data = resp.json()
+    # Special handling for data.gov.in Agmarknet responses
+    if isinstance(data, dict) and 'records' in data and isinstance(data['records'], list):
+        return _aggregate_agmarknet_records(data['records'])
     if isinstance(data, dict) and isinstance(data.get('data'), list):
         return data['data']
     if isinstance(data, list):
         return data
     return []
+
+AGMARKNET_NAME_MAP = {
+    'Paddy': 'Rice (Basmati)',
+    'Rice': 'Rice (Basmati)',
+    'Wheat': 'WheAT',  # Temporary, will normalize casing below
+    'Maize': 'Maize',
+    'Gram': 'Chana (Chickpea)',
+    'Chana': 'Chana (Chickpea)',
+    'Soyabean': 'Soybean',
+    'Soybean': 'Soybean',
+    'Sunflower': 'Sunflower',
+    'Rapeseed & Mustard': 'Mustard',
+    'Mustard': 'Mustard',
+    'Onion': 'Onion',
+    'Potato': 'Potato',
+    'Tomato': 'Tomato',
+    'Green Chilly': 'Chili',
+    'Chilli': 'Chili',
+    'Banana': 'Banana',
+    'Grapes': 'Grapes',
+    'Mango': 'Mango (Seasonal)',
+}
+
+def _aggregate_agmarknet_records(records):
+    """Aggregate Agmarknet records into per-commodity items with modal_price average."""
+    per_commodity = {}
+    counts = {}
+    for rec in records:
+        commodity_raw = rec.get('commodity')
+        if not commodity_raw:
+            continue
+        # Map commodity names to our static names when possible
+        name_mapped = AGMARKNET_NAME_MAP.get(commodity_raw, commodity_raw)
+        # Normalize a typo introduced by mapping
+        if name_mapped == 'WheAT':
+            name_mapped = 'Wheat'
+
+        price_val = _to_number(rec.get('modal_price'))
+        if price_val is None:
+            continue
+        if name_mapped not in per_commodity:
+            per_commodity[name_mapped] = 0.0
+            counts[name_mapped] = 0
+        per_commodity[name_mapped] += price_val
+        counts[name_mapped] += 1
+
+    items = []
+    for name, total_price in per_commodity.items():
+        cnt = max(1, counts.get(name, 1))
+        items.append({
+            'name': name,
+            'market_price': total_price / cnt,
+        })
+    return items
 
 def _to_number(value):
     try:
@@ -81,7 +139,7 @@ def _normalize_api_crop(item):
         return default
 
     return {
-        'name': pick('name', 'crop', 'crop_name'),
+        'name': pick('name', 'crop', 'crop_name', 'commodity'),
         'type': pick('type', 'category', 'crop_type'),
         'temp_min': _to_number(pick('temp_min', 'min_temp', 'temperature_min', 'tempMin')),
         'temp_max': _to_number(pick('temp_max', 'max_temp', 'temperature_max', 'tempMax')),
@@ -91,7 +149,7 @@ def _normalize_api_crop(item):
         'soil_ph_max': _to_number(pick('soil_ph_max', 'soilPhMax', 'soil_ph_high', 'ph_max')),
         'growing_season': pick('growing_season', 'season', 'growingSeason'),
         'water_requirement': pick('water_requirement', 'water', 'waterRequirement'),
-        'market_price': _to_number(pick('market_price', 'price', 'marketPrice')),
+        'market_price': _to_number(pick('market_price', 'price', 'marketPrice', 'modal_price')),
         'production_cost': _to_number(pick('production_cost', 'cost', 'productionCost')),
         'expected_yield': _to_number(pick('expected_yield', 'yield', 'expectedYield')),
         'growing_period_days': _to_number(pick('growing_period_days', 'growingDays', 'duration_days')),
