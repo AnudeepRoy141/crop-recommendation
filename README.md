@@ -37,6 +37,26 @@ We both collaborated to create this repository and wrote all the code.
 - Input soil and weather parameters when prompted.
 - The system will output the recommended crop.
 
+### Realtime Crop Data (optional)
+
+`data/crop_database.py` can pull realtime crop metadata when these environment variables are set:
+
+- `CROP_API_URL`: HTTPS endpoint returning a JSON list (or an object with `data` list) of crops
+- `CROP_API_KEY`: API key for authorization (sent as `Authorization: Bearer` and `x-api-key`)
+- `CROP_API_CACHE_TTL_SECONDS` (optional): Cache TTL in seconds, default `900`
+
+Example run:
+
+```bash
+CROP_API_URL="https://api.example.com/v1/crops" \
+CROP_API_KEY="your_api_key_here" \
+streamlit run app.py
+```
+
+Notes:
+- If the API fails or is not configured, the app falls back to the built‑in static dataset.
+- Realtime data are normalized and merged with static defaults (by `name`) to keep required fields intact.
+
 ## Dataset
 
 The dataset includes:
