@@ -1,9 +1,196 @@
+import os
+import time
+import requests
 import pandas as pd
 
-def get_crop_database():
+_CACHE = {
+    'data': None,
+    'ts': 0,
+}
+
+def get_crop_database(force_refresh=False):
     """
-    Returns a comprehensive database of crops with their growing requirements
-    and economic data based on Indian agricultural patterns.
+    Returns crop database, preferring realtime API data when configured.
+    Fallbacks to static synthetic data if API is not configured or fails.
+    """
+    api_key = os.environ.get('CROP_API_KEY')
+    api_url = (os.environ.get('CROP_API_URL') or '').strip()
+    cache_ttl = int(os.environ.get('CROP_API_CACHE_TTL_SECONDS', '900'))
+
+    # Serve from cache if valid
+    if not force_refresh and _CACHE['data'] is not None and (time.time() - _CACHE['ts']) < cache_ttl:
+        return _CACHE['data']
+
+    # Try realtime API if configured
+    if api_key and api_url:
+        try:
+            static_defaults = get_static_crop_database()
+            static_by_name = {c['name']: c for c in static_defaults}
+            realtime_items = _fetch_crops_from_api(api_url, api_key)
+            merged = _merge_with_defaults_and_derive(realtime_items, static_by_name)
+            if merged:
+                _CACHE['data'] = merged
+                _CACHE['ts'] = time.time()
+                return merged
+        except Exception:
+            # Swallow and fall back to static data to keep the app operational
+            pass
+
+    # Fallback to static data
+    static_data = get_static_crop_database()
+    _CACHE['data'] = static_data
+    _CACHE['ts'] = time.time()
+    return static_data
+
+def _fetch_crops_from_api(api_url, api_key):
+    """Fetch crop items from external API and return a list of dicts."""
+    headers = {
+        'Authorization': f'Bearer {api_key}',
+        'x-api-key': api_key,
+        'Accept': 'application/json',
+    }
+    # For data.gov.in, the API key must be in the query string as `api-key`
+    resp = requests.get(api_url, headers=headers, timeout=15)
+    resp.raise_for_status()
+    data = resp.json()
+    # Special handling for data.gov.in Agmarknet responses
+    if isinstance(data, dict) and 'records' in data and isinstance(data['records'], list):
+        return _aggregate_agmarknet_records(data['records'])
+    if isinstance(data, dict) and isinstance(data.get('data'), list):
+        return data['data']
+    if isinstance(data, list):
+        return data
+    return []
+
+AGMARKNET_NAME_MAP = {
+    'Paddy': 'Rice (Basmati)',
+    'Rice': 'Rice (Basmati)',
+    'Wheat': 'WheAT',  # Temporary, will normalize casing below
+    'Maize': 'Maize',
+    'Gram': 'Chana (Chickpea)',
+    'Chana': 'Chana (Chickpea)',
+    'Soyabean': 'Soybean',
+    'Soybean': 'Soybean',
+    'Sunflower': 'Sunflower',
+    'Rapeseed & Mustard': 'Mustard',
+    'Mustard': 'Mustard',
+    'Onion': 'Onion',
+    'Potato': 'Potato',
+    'Tomato': 'Tomato',
+    'Green Chilly': 'Chili',
+    'Chilli': 'Chili',
+    'Banana': 'Banana',
+    'Grapes': 'Grapes',
+    'Mango': 'Mango (Seasonal)',
+}
+
+def _aggregate_agmarknet_records(records):
+    """Aggregate Agmarknet records into per-commodity items with modal_price average."""
+    per_commodity = {}
+    counts = {}
+    for rec in records:
+        commodity_raw = rec.get('commodity')
+        if not commodity_raw:
+            continue
+        # Map commodity names to our static names when possible
+        name_mapped = AGMARKNET_NAME_MAP.get(commodity_raw, commodity_raw)
+        # Normalize a typo introduced by mapping
+        if name_mapped == 'WheAT':
+            name_mapped = 'Wheat'
+
+        price_val = _to_number(rec.get('modal_price'))
+        if price_val is None:
+            continue
+        if name_mapped not in per_commodity:
+            per_commodity[name_mapped] = 0.0
+            counts[name_mapped] = 0
+        per_commodity[name_mapped] += price_val
+        counts[name_mapped] += 1
+
+    items = []
+    for name, total_price in per_commodity.items():
+        cnt = max(1, counts.get(name, 1))
+        items.append({
+            'name': name,
+            'market_price': total_price / cnt,
+        })
+    return items
+
+def _to_number(value):
+    try:
+        if value is None:
+            return None
+        if isinstance(value, (int, float)):
+            return value
+        if isinstance(value, str):
+            if value.strip() == '':
+                return None
+            return float(value)
+    except Exception:
+        return None
+    return None
+
+def _normalize_api_crop(item):
+    """Normalize various possible API field names into our schema."""
+    def pick(*keys, default=None):
+        for k in keys:
+            if k in item and item[k] is not None:
+                return item[k]
+        return default
+
+    return {
+        'name': pick('name', 'crop', 'crop_name', 'commodity'),
+        'type': pick('type', 'category', 'crop_type'),
+        'temp_min': _to_number(pick('temp_min', 'min_temp', 'temperature_min', 'tempMin')),
+        'temp_max': _to_number(pick('temp_max', 'max_temp', 'temperature_max', 'tempMax')),
+        'rainfall_min': _to_number(pick('rainfall_min', 'min_rainfall', 'rainfallMin')),
+        'rainfall_max': _to_number(pick('rainfall_max', 'max_rainfall', 'rainfallMax')),
+        'soil_ph_min': _to_number(pick('soil_ph_min', 'soilPhMin', 'soil_ph_low', 'ph_min')),
+        'soil_ph_max': _to_number(pick('soil_ph_max', 'soilPhMax', 'soil_ph_high', 'ph_max')),
+        'growing_season': pick('growing_season', 'season', 'growingSeason'),
+        'water_requirement': pick('water_requirement', 'water', 'waterRequirement'),
+        'market_price': _to_number(pick('market_price', 'price', 'marketPrice', 'modal_price')),
+        'production_cost': _to_number(pick('production_cost', 'cost', 'productionCost')),
+        'expected_yield': _to_number(pick('expected_yield', 'yield', 'expectedYield')),
+        'growing_period_days': _to_number(pick('growing_period_days', 'growingDays', 'duration_days')),
+    }
+
+def _merge_with_defaults_and_derive(realtime_items, static_by_name):
+    """
+    Merge realtime items with static defaults by name and compute derived metrics.
+    If realtime list is empty, return static defaults.
+    """
+    if not realtime_items:
+        return list(static_by_name.values())
+
+    result = []
+    for raw in realtime_items:
+        base = _normalize_api_crop(raw)
+        defaults = static_by_name.get(base.get('name') or '', {})
+
+        merged = {}
+        for key in [
+            'name','type','temp_min','temp_max','rainfall_min','rainfall_max',
+            'soil_ph_min','soil_ph_max','growing_season','water_requirement',
+            'market_price','production_cost','expected_yield','growing_period_days']:
+            value = base.get(key)
+            if value is None:
+                value = defaults.get(key)
+            merged[key] = value
+
+        revenue = (merged.get('expected_yield') or 0) * (merged.get('market_price') or 0)
+        production_cost = merged.get('production_cost') or 0
+        profit = revenue - production_cost
+        merged['profit_margin'] = (profit / revenue) * 100 if revenue > 0 else 0
+        merged['roi'] = (profit / production_cost) * 100 if production_cost > 0 else 0
+
+        result.append(merged)
+
+    return result
+
+def get_static_crop_database():
+    """
+    Static synthetic crop database used as a fallback.
     """
     crops_data = [
         # Cereals
@@ -224,14 +411,14 @@ def get_crop_database():
             'growing_period_days': 365
         }
     ]
-    
+
     # Add calculated fields
     for crop in crops_data:
         revenue = crop['expected_yield'] * crop['market_price']
         profit = revenue - crop['production_cost']
         crop['profit_margin'] = (profit / revenue) * 100 if revenue > 0 else 0
         crop['roi'] = (profit / crop['production_cost']) * 100 if crop['production_cost'] > 0 else 0
-    
+
     return crops_data
 
 def get_crop_by_name(crop_name):

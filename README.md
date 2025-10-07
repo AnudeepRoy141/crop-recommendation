@@ -37,6 +37,32 @@ We both collaborated to create this repository and wrote all the code.
 - Input soil and weather parameters when prompted.
 - The system will output the recommended crop.
 
+### Realtime Crop Data (optional)
+
+`data/crop_database.py` can pull realtime crop metadata when these environment variables are set:
+
+- `CROP_API_URL`: HTTPS endpoint returning crop data. Recommended: data.gov.in Agmarknet API
+- `CROP_API_KEY`: API key for authorization (used for `Authorization`/`x-api-key`; data.gov.in also expects `api-key` query parameter)
+- `CROP_API_CACHE_TTL_SECONDS` (optional): Cache TTL in seconds, default `900`
+
+Recommended real URL (Agmarknet on data.gov.in):
+
+- Daily prices (records): `https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?format=json&limit=200&api-key=YOUR_KEY`
+
+Sign up to get an API key: `https://api.data.gov.in/signup/`.
+
+Example run:
+
+```bash
+CROP_API_URL="https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?format=json&limit=200&api-key=$CROP_API_KEY" \
+CROP_API_KEY="your_data_gov_in_api_key" \
+streamlit run app.py
+```
+
+Notes:
+- If the API fails or is not configured, the app falls back to the built‑in static dataset.
+- Realtime data are normalized and merged with static defaults (by `name`) to keep required fields intact.
+
 ## Dataset
 
 The dataset includes:
