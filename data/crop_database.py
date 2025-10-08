@@ -1,10 +1,28 @@
 import pandas as pd
+import os
+from typing import Optional
+from utils.data_analyzer import LivePriceProvider
 
-def get_crop_database():
+def _maybe_update_price(provider: LivePriceProvider, crop_name: str, fallback_price: int, region: Optional[str] = None) -> int:
+    """
+    Try to replace static market_price with live price (INR/quintal) from provider.
+    Returns an integer price, falling back to the static price if provider not configured or unavailable.
+    """
+    live_price = provider.get_price_rs_per_quintal(crop_name, region=region)
+    if live_price is None:
+        return fallback_price
+    try:
+        return int(round(live_price))
+    except Exception:
+        return fallback_price
+
+
+def get_crop_database(region: Optional[str] = None):
     """
     Returns a comprehensive database of crops with their growing requirements
     and economic data based on Indian agricultural patterns.
     """
+    price_provider = LivePriceProvider()
     crops_data = [
         # Cereals
         {
@@ -15,7 +33,7 @@ def get_crop_database():
             'soil_ph_min': 5.5, 'soil_ph_max': 7.0,
             'growing_season': 'Kharif (Jun-Nov)',
             'water_requirement': 'High',
-            'market_price': 4500,  # ₹ per quintal
+            'market_price': _maybe_update_price(price_provider, 'Rice (Basmati)', 4500, region),  # ₹ per quintal
             'production_cost': 35000,  # ₹ per acre
             'expected_yield': 20,  # quintal per acre
             'growing_period_days': 120
@@ -28,7 +46,7 @@ def get_crop_database():
             'soil_ph_min': 6.0, 'soil_ph_max': 7.5,
             'growing_season': 'Rabi (Nov-Apr)',
             'water_requirement': 'Medium',
-            'market_price': 2200,
+            'market_price': _maybe_update_price(price_provider, 'Wheat', 2200, region),
             'production_cost': 25000,
             'expected_yield': 25,
             'growing_period_days': 120
@@ -41,7 +59,7 @@ def get_crop_database():
             'soil_ph_min': 5.8, 'soil_ph_max': 7.8,
             'growing_season': 'Kharif/Rabi',
             'water_requirement': 'Medium',
-            'market_price': 1800,
+            'market_price': _maybe_update_price(price_provider, 'Maize', 1800, region),
             'production_cost': 20000,
             'expected_yield': 30,
             'growing_period_days': 90
@@ -56,7 +74,7 @@ def get_crop_database():
             'soil_ph_min': 6.0, 'soil_ph_max': 7.5,
             'growing_season': 'Rabi (Oct-Mar)',
             'water_requirement': 'Low',
-            'market_price': 5500,
+            'market_price': _maybe_update_price(price_provider, 'Chana (Chickpea)', 5500, region),
             'production_cost': 18000,
             'expected_yield': 12,
             'growing_period_days': 110
@@ -69,7 +87,7 @@ def get_crop_database():
             'soil_ph_min': 6.2, 'soil_ph_max': 7.2,
             'growing_season': 'Kharif/Summer',
             'water_requirement': 'Low',
-            'market_price': 6000,
+            'market_price': _maybe_update_price(price_provider, 'Moong (Mung Bean)', 6000, region),
             'production_cost': 15000,
             'expected_yield': 8,
             'growing_period_days': 70
@@ -82,7 +100,7 @@ def get_crop_database():
             'soil_ph_min': 6.0, 'soil_ph_max': 7.0,
             'growing_season': 'Kharif (Jun-Oct)',
             'water_requirement': 'Medium',
-            'market_price': 6500,
+            'market_price': _maybe_update_price(price_provider, 'Urad (Black Gram)', 6500, region),
             'production_cost': 16000,
             'expected_yield': 6,
             'growing_period_days': 80
@@ -97,7 +115,7 @@ def get_crop_database():
             'soil_ph_min': 6.0, 'soil_ph_max': 7.5,
             'growing_season': 'Kharif (Jun-Oct)',
             'water_requirement': 'Medium',
-            'market_price': 4200,
+            'market_price': _maybe_update_price(price_provider, 'Soybean', 4200, region),
             'production_cost': 22000,
             'expected_yield': 18,
             'growing_period_days': 100
@@ -110,7 +128,7 @@ def get_crop_database():
             'soil_ph_min': 6.0, 'soil_ph_max': 8.0,
             'growing_season': 'Kharif/Rabi',
             'water_requirement': 'Medium',
-            'market_price': 5800,
+            'market_price': _maybe_update_price(price_provider, 'Sunflower', 5800, region),
             'production_cost': 20000,
             'expected_yield': 12,
             'growing_period_days': 90
@@ -123,7 +141,7 @@ def get_crop_database():
             'soil_ph_min': 6.0, 'soil_ph_max': 7.5,
             'growing_season': 'Rabi (Oct-Mar)',
             'water_requirement': 'Low',
-            'market_price': 4800,
+            'market_price': _maybe_update_price(price_provider, 'Mustard', 4800, region),
             'production_cost': 18000,
             'expected_yield': 10,
             'growing_period_days': 120
@@ -138,7 +156,7 @@ def get_crop_database():
             'soil_ph_min': 6.0, 'soil_ph_max': 7.0,
             'growing_season': 'All seasons',
             'water_requirement': 'High',
-            'market_price': 2500,
+            'market_price': _maybe_update_price(price_provider, 'Tomato', 2500, region),
             'production_cost': 45000,
             'expected_yield': 150,
             'growing_period_days': 120
@@ -151,7 +169,7 @@ def get_crop_database():
             'soil_ph_min': 5.0, 'soil_ph_max': 7.0,
             'growing_season': 'Rabi (Oct-Feb)',
             'water_requirement': 'Medium',
-            'market_price': 1200,
+            'market_price': _maybe_update_price(price_provider, 'Potato', 1200, region),
             'production_cost': 30000,
             'expected_yield': 80,
             'growing_period_days': 90
@@ -164,7 +182,7 @@ def get_crop_database():
             'soil_ph_min': 5.8, 'soil_ph_max': 7.0,
             'growing_season': 'Rabi (Nov-Apr)',
             'water_requirement': 'Medium',
-            'market_price': 1800,
+            'market_price': _maybe_update_price(price_provider, 'Onion', 1800, region),
             'production_cost': 35000,
             'expected_yield': 100,
             'growing_period_days': 120
@@ -177,7 +195,7 @@ def get_crop_database():
             'soil_ph_min': 6.0, 'soil_ph_max': 7.0,
             'growing_season': 'Kharif/Rabi',
             'water_requirement': 'Medium',
-            'market_price': 8000,
+            'market_price': _maybe_update_price(price_provider, 'Chili', 8000, region),
             'production_cost': 40000,
             'expected_yield': 25,
             'growing_period_days': 150
@@ -192,7 +210,7 @@ def get_crop_database():
             'soil_ph_min': 5.5, 'soil_ph_max': 7.5,
             'growing_season': 'Perennial',
             'water_requirement': 'Medium',
-            'market_price': 6000,
+            'market_price': _maybe_update_price(price_provider, 'Mango (Seasonal)', 6000, region),
             'production_cost': 80000,
             'expected_yield': 50,
             'growing_period_days': 365
@@ -205,7 +223,7 @@ def get_crop_database():
             'soil_ph_min': 6.0, 'soil_ph_max': 7.5,
             'growing_season': 'All year',
             'water_requirement': 'High',
-            'market_price': 1500,
+            'market_price': _maybe_update_price(price_provider, 'Banana', 1500, region),
             'production_cost': 60000,
             'expected_yield': 200,
             'growing_period_days': 365
@@ -218,14 +236,14 @@ def get_crop_database():
             'soil_ph_min': 6.5, 'soil_ph_max': 8.0,
             'growing_season': 'Perennial',
             'water_requirement': 'Medium',
-            'market_price': 4000,
+            'market_price': _maybe_update_price(price_provider, 'Grapes', 4000, region),
             'production_cost': 120000,
             'expected_yield': 80,
             'growing_period_days': 365
         }
     ]
     
-    # Add calculated fields
+    # Add calculated fields derived from possibly-updated market prices
     for crop in crops_data:
         revenue = crop['expected_yield'] * crop['market_price']
         profit = revenue - crop['production_cost']
@@ -246,13 +264,13 @@ def get_crops_by_type(crop_type):
         return crops
     return [crop for crop in crops if crop['type'] == crop_type]
 
-def get_suitable_crops_for_climate(temp_range, rainfall_range, soil_ph=6.5):
+def get_suitable_crops_for_climate(temp_range, rainfall_range, soil_ph=6.5, region=None):
     """
     Get crops suitable for given climate conditions
     temp_range: (min_temp, max_temp)
     rainfall_range: (min_rainfall, max_rainfall)
     """
-    crops = get_crop_database()
+    crops = get_crop_database(region)
     suitable_crops = []
     
     min_temp, max_temp = temp_range

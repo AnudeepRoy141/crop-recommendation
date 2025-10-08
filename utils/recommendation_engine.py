@@ -22,7 +22,7 @@ class CropRecommendationEngine:
         rainfall_range = (annual_rainfall * 0.8, annual_rainfall * 1.2)
         
         # Get suitable crops based on climate
-        suitable_crops = get_suitable_crops_for_climate(temp_range, rainfall_range)
+        suitable_crops = get_suitable_crops_for_climate(temp_range, rainfall_range, region=region_info.get('name'))
         
         # Get soil data for the region
         soil_data = get_detailed_soil_data()

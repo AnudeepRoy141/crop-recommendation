@@ -1,5 +1,76 @@
 import pandas as pd
 import numpy as np
+import os
+import json
+from typing import Dict, Optional
+import requests
+
+
+class LivePriceProvider:
+    """Fetch live commodity prices via API key (non-government providers).
+
+    This minimal provider supports a pluggable base URL and API key. It expects the
+    remote service to return a JSON with price per quintal for a commodity/crop.
+
+    Environment variables:
+    - MARKET_API_BASE_URL: Base URL of the provider (e.g., https://api.example.com)
+    - MARKET_API_KEY: API key token
+    - MARKET_API_TIMEOUT: Optional request timeout seconds (default 8)
+
+    Endpoint contract (example):
+      GET {BASE}/v1/prices?crop_name=Soybean&region=India
+      Headers: Authorization: Bearer <API_KEY>
+      Response JSON example: { "crop_name": "Soybean", "currency": "INR", "unit": "quintal", "price": 4800 }
+    """
+
+    def __init__(self, base_url: Optional[str] = None, api_key: Optional[str] = None, timeout: Optional[int] = None):
+        self.base_url = base_url or os.getenv('MARKET_API_BASE_URL')
+        self.api_key = api_key or os.getenv('MARKET_API_KEY')
+        self.timeout = int(timeout or os.getenv('MARKET_API_TIMEOUT') or 8)
+
+    def is_configured(self) -> bool:
+        return bool(self.base_url and self.api_key)
+
+    def _headers(self) -> Dict[str, str]:
+        return {
+            'Authorization': f'Bearer {self.api_key}',
+            'Accept': 'application/json'
+        }
+
+    def _build_url(self, path: str) -> str:
+        return f"{self.base_url.rstrip('/')}/{path.lstrip('/')}"
+
+    def get_price_rs_per_quintal(self, crop_name: str, region: Optional[str] = None) -> Optional[float]:
+        if not self.is_configured():
+            return None
+        params = { 'crop_name': crop_name }
+        if region:
+            params['region'] = region
+        url = self._build_url('/v1/prices')
+        try:
+            resp = requests.get(url, headers=self._headers(), params=params, timeout=self.timeout)
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            # Expected fields: price in INR per quintal
+            price = data.get('price')
+            unit = data.get('unit', '').lower()
+            currency = data.get('currency', '').upper()
+            if price is None:
+                return None
+            if currency and currency != 'INR':
+                return None
+            # Normalize to per quintal if needed
+            if unit in ('quintal', 'qtl', 'qt'):  # already per quintal
+                return float(price)
+            if unit in ('ton', 'tonne', 't'):
+                return float(price) / 10.0
+            if unit in ('kg',):
+                return float(price) * 100.0
+            # Unknown unit; return as-is
+            return float(price)
+        except requests.RequestException:
+            return None
 from scipy import stats
 from data.weather_data import get_weather_data_for_region
 from data.crop_database import get_crop_database
